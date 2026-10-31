@@ -1,51 +1,114 @@
 "use client";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardBody } from "@/components/ui/card";
 
 export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    setNotice(null);
     const supabase = createClient();
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) {
       setError(error.message);
       setBusy(false);
       return;
     }
-    router.push("/dashboard");
-    router.refresh();
+    if (data.session) {
+      router.push("/dashboard");
+      router.refresh();
+      return;
+    }
+    setNotice("Check your email to confirm your account, then log in.");
+    setBusy(false);
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
-      <h1 className="text-2xl font-semibold">Create your account</h1>
-      <p className="mt-2 text-sm text-muted">Start turning your lecture notes into lessons.</p>
-      <form onSubmit={onSubmit} className="mt-8 space-y-4">
-        <input type="email" required placeholder="Email" value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-lg border border-border px-4 py-3 text-sm outline-none focus:border-accent" />
-        <input type="password" required placeholder="Password" value={password}
-          onChange={(e) => setPassword(e.target.value)} minLength={6}
-          className="w-full rounded-lg border border-border px-4 py-3 text-sm outline-none focus:border-accent" />
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <button type="submit" disabled={busy}
-          className="w-full rounded-lg bg-accent px-4 py-3 text-sm font-medium text-accent-foreground hover:opacity-90 disabled:opacity-40">
-          {busy ? "Creating…" : "Create account"}
-        </button>
-      </form>
-      <p className="mt-6 text-sm text-muted">
-        Already have an account? <Link href="/login" className="text-accent">Log in</Link>
-      </p>
+    <main className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
+      <div className="w-full max-w-sm">
+        <div className="text-center">
+          <Link href="/" className="text-lg font-semibold tracking-tight text-foreground">
+            lens
+          </Link>
+        </div>
+
+        <Card className="mt-8">
+          <CardBody>
+            <h1 className="text-2xl font-semibold text-foreground">Create your account</h1>
+            <p className="mt-1 text-sm text-muted">
+              Turn your lecture notes into lessons you can follow.
+            </p>
+
+            <form onSubmit={onSubmit} className="mt-6 space-y-4">
+              <div>
+                <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-foreground">
+                  Email
+                </label>
+                <Input
+                  id="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  placeholder="you@university.edu"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-foreground">
+                  Password
+                </label>
+                <Input
+                  id="password"
+                  type="password"
+                  required
+                  minLength={6}
+                  autoComplete="new-password"
+                  placeholder="At least 6 characters"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+
+              {error && (
+                <div className="rounded-lg border border-danger/20 bg-danger-soft px-3 py-2 text-sm text-danger">
+                  {error}
+                </div>
+              )}
+              {notice && (
+                <div className="rounded-lg border border-success/20 bg-success-soft px-3 py-2 text-sm text-success">
+                  {notice}
+                </div>
+              )}
+
+              <Button type="submit" disabled={busy} className="w-full">
+                {busy ? "Creating account…" : "Create account"}
+              </Button>
+            </form>
+          </CardBody>
+        </Card>
+
+        <p className="mt-6 text-center text-sm text-muted">
+          Already have an account?{" "}
+          <Link href="/login" className="font-medium text-accent hover:underline">
+            Log in
+          </Link>
+        </p>
+      </div>
     </main>
   );
 }
