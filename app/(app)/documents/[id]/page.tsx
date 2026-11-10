@@ -94,7 +94,7 @@ export default function DocumentPage({
         </div>
       )}
 
-      {status === "processing" && (
+      {(status === "processing" || status === "detecting_topics") && (
         <div className="mt-8">
           <h1 className="text-3xl font-semibold text-foreground">Analysing your document…</h1>
           <p className="mt-2 text-base text-muted">

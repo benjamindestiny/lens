@@ -143,6 +143,47 @@ def process_lesson(lesson: dict) -> bool:
     return True
 
 
+def process_pending_documents() -> int:
+    from detect_topics import detect_topics
+
+    docs = (
+        supabase.table("documents")
+        .select("id, extracted_text")
+        .eq("status", "detecting_topics")
+        .limit(2)
+        .execute()
+    ).data
+
+    if not docs:
+        return 0
+
+    for doc in docs:
+        try:
+            print(f"[topics] document {doc['id']}")
+            topics = detect_topics(doc["extracted_text"] or "")
+
+            supabase.table("topics").delete().eq("document_id", doc["id"]).execute()
+            rows = [
+                {
+                    "document_id": doc["id"],
+                    "title": t["title"],
+                    "summary": t["summary"],
+                    "order": i + 1,
+                    "selected": True,
+                }
+                for i, t in enumerate(topics)
+            ]
+            supabase.table("topics").insert(rows).execute()
+            supabase.table("documents").update({"status": "topics_ready"}).eq("id", doc["id"]).execute()
+            print(f"[topics] {len(rows)} topics for {doc['id']}")
+        except Exception as e:
+            msg = str(e)[:300]
+            print(f"[topics] failed for {doc['id']}: {msg}")
+            supabase.table("documents").update({"status": "failed", "error": msg}).eq("id", doc["id"]).execute()
+
+    return len(docs)
+
+
 def process_pending_lessons() -> int:
     lessons = (
         supabase.table("lessons")
@@ -182,8 +223,9 @@ def main():
     print("Worker started. Polling for queued lessons…")
     while True:
         try:
+            d = process_pending_documents()
             n = process_pending_lessons()
-            if n == 0:
+            if n == 0 and d == 0:
                 time.sleep(5)
         except KeyboardInterrupt:
             print("\nStopped.")

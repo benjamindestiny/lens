@@ -1,6 +1,7 @@
 export type DocumentStatus =
   | "uploaded"
   | "processing"
+  | "detecting_topics"
   | "topics_ready"
   | "generating"
   | "ready"
