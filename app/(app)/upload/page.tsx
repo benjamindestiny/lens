@@ -3,7 +3,9 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
+import { UploadModal } from "@/components/upload-modal";
+
+type ModalState = "idle" | "uploading" | "error" | "success";
 
 export default function UploadPage() {
   const router = useRouter();
@@ -11,22 +13,24 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [modal, setModal] = useState<ModalState>("idle");
+  const [progress, setProgress] = useState(0);
 
   function pick(f: File | null) {
     setError(null);
     if (!f) return setFile(null);
-    if (!/\.(pdf|pptx)$/i.test(f.name)) {
-      return setError("Only PDF and PowerPoint files are supported.");
-    }
+    if (!/\.(pdf|pptx)$/i.test(f.name)) return setError("Only PDF and PowerPoint files are supported.");
     setFile(f);
   }
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function doUpload() {
     if (!file) return;
-    setBusy(true);
-    setError(null);
+    setModal("uploading");
+    setProgress(0);
+
+    const tick = setInterval(() => {
+      setProgress((p) => (p < 0.9 ? p + 0.07 : p));
+    }, 200);
 
     try {
       const supabase = createClient();
@@ -37,7 +41,9 @@ export default function UploadPage() {
       const { error: upErr } = await supabase.storage
         .from("lectures")
         .upload(path, file, { contentType: file.type, upsert: false });
-      if (upErr) throw new Error(`Upload failed: ${upErr.message}`);
+      if (upErr) throw new Error(upErr.message);
+
+      setProgress(0.95);
 
       const res = await fetch("/api/documents", {
         method: "POST",
@@ -48,30 +54,36 @@ export default function UploadPage() {
         const body = await res.json().catch(() => null);
         throw new Error(body?.error?.message ?? "Could not create document.");
       }
+
       const data = await res.json();
-      router.push(`/documents/${data.document_id}`);
+      clearInterval(tick);
+      setProgress(1);
+      setModal("success");
+      setTimeout(() => router.push(`/documents/${data.document_id}`), 800);
     } catch (err) {
+      clearInterval(tick);
       setError(err instanceof Error ? err.message : "Upload failed.");
-      setBusy(false);
+      setModal("error");
     }
   }
 
-  function formatSize(bytes: number) {
-    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!file) return;
+    doUpload();
   }
 
   return (
     <div className="mx-auto max-w-xl">
-      {busy && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-6 text-center shadow-lg">
-            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-border border-t-accent" />
-            <h2 className="mt-4 text-lg font-semibold text-foreground">Uploading your lecture</h2>
-            <p className="mt-2 text-sm text-muted">This usually takes a few seconds. We&apos;ll take you to the topics as soon as it&apos;s ready.</p>
-          </div>
-        </div>
-      )}
+      <UploadModal
+        state={modal}
+        progress={progress}
+        filename={file?.name ?? ""}
+        error={error}
+        onRetry={() => { setModal("idle"); setError(null); }}
+        onCancel={() => { setModal("idle"); setProgress(0); }}
+      />
+
       <h1 className="text-3xl font-semibold text-foreground">Upload lecture material</h1>
       <p className="mt-2 text-base text-muted">
         A PDF or PowerPoint from your lecturer. We&apos;ll find the topics inside it and turn each one into a lesson.
@@ -81,11 +93,7 @@ export default function UploadPage() {
         <div
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragging(false);
-            pick(e.dataTransfer.files?.[0] ?? null);
-          }}
+          onDrop={(e) => { e.preventDefault(); setDragging(false); pick(e.dataTransfer.files?.[0] ?? null); }}
           onClick={() => inputRef.current?.click()}
           className={`cursor-pointer rounded-xl border-2 border-dashed p-10 text-center transition-colors ${
             dragging ? "border-accent bg-accent-soft"
@@ -97,12 +105,12 @@ export default function UploadPage() {
             onChange={(e) => pick(e.target.files?.[0] ?? null)} />
           {file ? (
             <div className="flex items-center justify-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-xs font-semibold text-accent">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft text-xs font-semibold text-accent">
                 {file.name.split(".").pop()?.toUpperCase() ?? "FILE"}
               </div>
               <div className="min-w-0 text-left">
                 <p className="truncate text-sm font-medium text-foreground">{file.name}</p>
-                <p className="text-xs text-muted">{formatSize(file.size)}</p>
+                <p className="text-xs text-muted">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
               </div>
               <button type="button" onClick={(e) => { e.stopPropagation(); setFile(null); }}
                 className="ml-4 text-xs text-muted hover:text-danger">Remove</button>
@@ -115,30 +123,17 @@ export default function UploadPage() {
           )}
         </div>
 
-        {error && (
-          <div className="mt-4 rounded-lg border border-danger/20 bg-danger-soft px-4 py-3 text-sm text-danger">
-            {error}
-          </div>
+        {error && modal === "idle" && (
+          <div className="mt-4 rounded-lg border border-danger/20 bg-danger-soft px-4 py-3 text-sm text-danger">{error}</div>
         )}
 
         <div className="mt-6 flex items-center justify-between gap-4">
           <p className="text-xs text-muted">Your file stays private to your account.</p>
-          <Button type="submit" disabled={!file || busy}>
-            {busy ? "Uploading…" : "Upload and analyse"}
+          <Button type="submit" disabled={!file || modal === "uploading"}>
+            {modal === "uploading" ? "Uploading…" : "Upload and analyse"}
           </Button>
         </div>
       </form>
-
-      <Card className="mt-10">
-        <CardBody>
-          <p className="text-sm font-medium text-foreground">What happens next</p>
-          <ol className="mt-3 space-y-2 text-sm text-muted">
-            <li className="flex gap-2"><span className="text-foreground">1.</span> We read the document and find the topics inside it.</li>
-            <li className="flex gap-2"><span className="text-foreground">2.</span> You see the topics and choose which ones to keep.</li>
-            <li className="flex gap-2"><span className="text-foreground">3.</span> Each topic becomes a short lesson in your dashboard.</li>
-          </ol>
-        </CardBody>
-      </Card>
     </div>
   );
 }

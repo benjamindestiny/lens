@@ -206,7 +206,7 @@ export default function DocumentPage({
                       <div className="min-w-0">
                         <p className="truncate text-base font-medium text-foreground">{l.title}</p>
                         <p className="text-sm text-muted">
-                          {l.duration_seconds ? `${Math.round(l.duration_seconds / 60)} min` : "Length pending"}
+                          {l.duration_seconds ? `${Math.round(l.duration_seconds / 60)} min` : (l.status === "ready" ? "" : "Generating…")}
                         </p>
                       </div>
                     </div>
