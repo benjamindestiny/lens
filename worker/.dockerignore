@@ -1,0 +1,9 @@
+.venv
+__pycache__
+*.pyc
+*.wav
+narration
+kokoro-v1.0.onnx
+voices-v1.0.bin
+remotion/node_modules
+.env

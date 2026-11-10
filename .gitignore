@@ -39,3 +39,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+worker/.env
+
+# worker
+worker/.venv/
+worker/__pycache__/
+worker/*.pyc
+worker/*.wav
+worker/kokoro-v1.0.onnx
+worker/voices-v1.0.bin
+worker/remotion/node_modules/
+worker/remotion/out/
+worker/.env
+worker/narration/

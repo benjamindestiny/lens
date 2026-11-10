@@ -30,6 +30,7 @@ export async function processDocument(
 ) {
   try {
     const text = await extractTextFromFile(buffer, filename);
+    await supabase.from("documents").update({ extracted_text: text }).eq("id", documentId);
     if (!text || text.trim().length < 50) {
       throw new Error("Extracted text was too short to analyse.");
     }

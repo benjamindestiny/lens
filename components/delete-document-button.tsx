@@ -38,7 +38,7 @@ export function DeleteDocumentButton({
     return (
       <button
         onClick={() => setConfirming(true)}
-        className="text-sm text-muted transition-colors hover:text-danger"
+        className="text-xs text-muted/70 transition-colors hover:text-danger"
       >
         Delete
       </button>

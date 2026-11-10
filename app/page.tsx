@@ -9,6 +9,9 @@ export default function LandingPage() {
           <span className="text-base font-semibold tracking-tight text-foreground">lens</span>
           <nav className="flex items-center gap-2">
             <ThemeToggle />
+            <ButtonLink href="/pricing" variant="ghost" size="sm">
+              Pricing
+            </ButtonLink>
             <ButtonLink href="/login" variant="ghost" size="sm">
               Log in
             </ButtonLink>

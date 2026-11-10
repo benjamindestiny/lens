@@ -21,7 +21,15 @@ export async function DELETE(
   }
 
   if (doc.storage_path) {
-    await supabase.storage.from("lectures").remove([doc.storage_path]);
+    const { error: rmErr } = await supabase.storage
+      .from("lectures")
+      .remove([doc.storage_path]);
+    if (rmErr) {
+      return Response.json(
+        { error: { code: "STORAGE_ERROR", message: rmErr.message } },
+        { status: 500 }
+      );
+    }
   }
 
   const { error } = await supabase.from("documents").delete().eq("id", id);

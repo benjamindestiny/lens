@@ -1,0 +1,16 @@
+services:
+  - type: worker
+    name: lens-worker
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: REMOTION_BROWSER_EXECUTABLE
+        value: /usr/bin/chromium

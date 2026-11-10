@@ -19,7 +19,10 @@ export async function POST(
     return Response.json({ error: { code: "VALIDATION_ERROR", message: "No topics selected." } }, { status: 400 });
   }
 
-  const { error: gErr } = await supabase.from("documents").update({ status: "generating" }).eq("id", id);
+  const { error: gErr } = await supabase
+    .from("documents")
+    .update({ status: "generating" })
+    .eq("id", id);
   if (gErr) return Response.json({ error: { code: "DB_ERROR", message: gErr.message } }, { status: 500 });
 
   const { error: dErr } = await supabase.from("lessons").delete().eq("document_id", id);
@@ -29,15 +32,12 @@ export async function POST(
     document_id: id,
     topic_id: t.id,
     title: t.title,
-    status: "ready" as const,
-    duration_seconds: 240,
-    video_url: "/demo.mp4",
+    status: "queued" as const,
+    duration_seconds: null,
+    video_url: null,
   }));
   const { error: iErr } = await supabase.from("lessons").insert(rows);
   if (iErr) return Response.json({ error: { code: "DB_ERROR", message: iErr.message } }, { status: 500 });
 
-  const { error: rErr } = await supabase.from("documents").update({ status: "ready" }).eq("id", id);
-  if (rErr) return Response.json({ error: { code: "DB_ERROR", message: rErr.message } }, { status: 500 });
-
-  return Response.json({ document_id: id, status: "ready" }, { status: 202 });
+  return Response.json({ document_id: id, status: "generating" }, { status: 202 });
 }
