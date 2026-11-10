@@ -1,10 +1,10 @@
 services:
-  - type: worker
+  - type: web
     name: lens-worker
     runtime: docker
     plan: free
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
+    dockerfilePath: ./worker/Dockerfile
+    dockerContext: ./worker
     envVars:
       - key: SUPABASE_URL
         sync: false
