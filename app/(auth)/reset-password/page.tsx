@@ -66,6 +66,7 @@ export default function ResetPasswordPage() {
                   <Input
                     id="password"
                     type="password"
+                    showToggle
                     required
                     minLength={6}
                     autoComplete="new-password"

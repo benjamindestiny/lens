@@ -75,6 +75,7 @@ export default function SignupPage() {
                 <Input
                   id="password"
                   type="password"
+                  showToggle
                   required
                   minLength={6}
                   autoComplete="new-password"

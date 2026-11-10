@@ -66,6 +66,7 @@ export default function LoginPage() {
                 <Input
                   id="password"
                   type="password"
+                  showToggle
                   required
                   autoComplete="current-password"
                   placeholder="Your password"

@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { uploadDocument } from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 
@@ -15,13 +15,9 @@ export default function UploadPage() {
 
   function pick(f: File | null) {
     setError(null);
-    if (!f) {
-      setFile(null);
-      return;
-    }
+    if (!f) return setFile(null);
     if (!/\.(pdf|pptx)$/i.test(f.name)) {
-      setError("Only PDF and PowerPoint files are supported.");
-      return;
+      return setError("Only PDF and PowerPoint files are supported.");
     }
     setFile(f);
   }
@@ -31,9 +27,29 @@ export default function UploadPage() {
     if (!file) return;
     setBusy(true);
     setError(null);
+
     try {
-      const res = await uploadDocument(file);
-      router.push(`/documents/${res.document_id}`);
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in.");
+
+      const path = `${user.id}/${Date.now()}-${file.name}`;
+      const { error: upErr } = await supabase.storage
+        .from("lectures")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) throw new Error(`Upload failed: ${upErr.message}`);
+
+      const res = await fetch("/api/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, storage_path: path }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error?.message ?? "Could not create document.");
+      }
+      const data = await res.json();
+      router.push(`/documents/${data.document_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
       setBusy(false);
@@ -47,19 +63,23 @@ export default function UploadPage() {
 
   return (
     <div className="mx-auto max-w-xl">
-      <div>
-        <h1 className="text-3xl font-semibold text-foreground">Upload lecture material</h1>
-        <p className="mt-2 text-base text-muted">
-          A PDF or PowerPoint from your lecturer. We&apos;ll find the topics inside it and turn each one into a lesson.
-        </p>
-      </div>
+      {busy && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-6 text-center shadow-lg">
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-border border-t-accent" />
+            <h2 className="mt-4 text-lg font-semibold text-foreground">Uploading your lecture</h2>
+            <p className="mt-2 text-sm text-muted">This usually takes a few seconds. We&apos;ll take you to the topics as soon as it&apos;s ready.</p>
+          </div>
+        </div>
+      )}
+      <h1 className="text-3xl font-semibold text-foreground">Upload lecture material</h1>
+      <p className="mt-2 text-base text-muted">
+        A PDF or PowerPoint from your lecturer. We&apos;ll find the topics inside it and turn each one into a lesson.
+      </p>
 
       <form onSubmit={onSubmit} className="mt-8">
         <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragging(true);
-          }}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={(e) => {
             e.preventDefault();
@@ -68,21 +88,13 @@ export default function UploadPage() {
           }}
           onClick={() => inputRef.current?.click()}
           className={`cursor-pointer rounded-xl border-2 border-dashed p-10 text-center transition-colors ${
-            dragging
-              ? "border-accent bg-accent-soft"
-              : file
-              ? "border-border bg-surface"
+            dragging ? "border-accent bg-accent-soft"
+              : file ? "border-border bg-surface"
               : "border-border bg-surface hover:border-muted/60"
           }`}
         >
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".pdf,.pptx"
-            className="hidden"
-            onChange={(e) => pick(e.target.files?.[0] ?? null)}
-          />
-
+          <input ref={inputRef} type="file" accept=".pdf,.pptx" className="hidden"
+            onChange={(e) => pick(e.target.files?.[0] ?? null)} />
           {file ? (
             <div className="flex items-center justify-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-xs font-semibold text-accent">
@@ -92,39 +104,13 @@ export default function UploadPage() {
                 <p className="truncate text-sm font-medium text-foreground">{file.name}</p>
                 <p className="text-xs text-muted">{formatSize(file.size)}</p>
               </div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setFile(null);
-                }}
-                className="ml-4 text-xs text-muted transition-colors hover:text-danger"
-              >
-                Remove
-              </button>
+              <button type="button" onClick={(e) => { e.stopPropagation(); setFile(null); }}
+                className="ml-4 text-xs text-muted hover:text-danger">Remove</button>
             </div>
           ) : (
             <div>
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-background">
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="text-muted"
-                  aria-hidden="true"
-                >
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
-                </svg>
-              </div>
-              <p className="mt-4 text-sm font-medium text-foreground">
-                Drop your file here, or click to browse
-              </p>
-              <p className="mt-1 text-xs text-muted">PDF or PPTX, up to your plan&apos;s file limit</p>
+              <p className="text-sm font-medium text-foreground">Drop your file here, or click to browse</p>
+              <p className="mt-1 text-xs text-muted">PDF or PPTX</p>
             </div>
           )}
         </div>
@@ -136,9 +122,7 @@ export default function UploadPage() {
         )}
 
         <div className="mt-6 flex items-center justify-between gap-4">
-          <p className="text-xs text-muted">
-            Your file stays private to your account.
-          </p>
+          <p className="text-xs text-muted">Your file stays private to your account.</p>
           <Button type="submit" disabled={!file || busy}>
             {busy ? "Uploading…" : "Upload and analyse"}
           </Button>
@@ -149,18 +133,9 @@ export default function UploadPage() {
         <CardBody>
           <p className="text-sm font-medium text-foreground">What happens next</p>
           <ol className="mt-3 space-y-2 text-sm text-muted">
-            <li className="flex gap-2">
-              <span className="text-foreground">1.</span>
-              We read the document and find the topics inside it.
-            </li>
-            <li className="flex gap-2">
-              <span className="text-foreground">2.</span>
-              You see the topics and choose which ones to keep.
-            </li>
-            <li className="flex gap-2">
-              <span className="text-foreground">3.</span>
-              Each topic becomes a short lesson in your dashboard.
-            </li>
+            <li className="flex gap-2"><span className="text-foreground">1.</span> We read the document and find the topics inside it.</li>
+            <li className="flex gap-2"><span className="text-foreground">2.</span> You see the topics and choose which ones to keep.</li>
+            <li className="flex gap-2"><span className="text-foreground">3.</span> Each topic becomes a short lesson in your dashboard.</li>
           </ol>
         </CardBody>
       </Card>
