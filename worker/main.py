@@ -5,6 +5,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import httpx
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 from supabase import create_client
 
@@ -19,6 +20,10 @@ SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "openai/gpt-oss-120b"
@@ -105,7 +110,7 @@ def process_lesson(lesson: dict) -> bool:
                 "word_count": word_count(script),
             }
         ).execute()
-        supabase.table("lessons").update({"status": "scripted"}).eq("id", lesson_id).execute()
+        supabase.table("lessons").update({"status": "scripted", "scripted_at": now_iso()}).eq("id", lesson_id).execute()
         print(f"[script] wrote {word_count(script)} words")
 
     supabase.table("lessons").update({"status": "narrating"}).eq("id", lesson_id).execute()
@@ -118,7 +123,7 @@ def process_lesson(lesson: dict) -> bool:
     )
     audio_url = supabase.storage.from_("lesson-audio").get_public_url(audio_path)
     supabase.table("lessons").update(
-        {"status": "narrated", "audio_url": audio_url, "audio_seconds": audio_seconds}
+        {"status": "narrated", "audio_url": audio_url, "audio_seconds": audio_seconds, "narrated_at": now_iso()}
     ).eq("id", lesson_id).execute()
     print(f"[narrate] wrote {audio_seconds:.1f}s of audio")
 
@@ -136,6 +141,7 @@ def process_lesson(lesson: dict) -> bool:
             "status": "ready",
             "video_url": video_url,
             "duration_seconds": int(audio_seconds),
+            "ready_at": now_iso(),
         }
     ).eq("id", lesson_id).execute()
     print(f"[render] wrote {len(video_bytes) // 1024} KB video")
@@ -144,9 +150,38 @@ def process_lesson(lesson: dict) -> bool:
 
 
 def process_pending_documents() -> int:
+    from extract_text import extract_text_from_file
     from detect_topics import detect_topics
 
-    docs = (
+    # Pass 1: extract text for processing documents
+    processing = (
+        supabase.table("documents")
+        .select("id, filename, storage_path")
+        .eq("status", "processing")
+        .limit(2)
+        .execute()
+    ).data
+
+    for doc in processing:
+        try:
+            print(f"[extract] {doc['id']}")
+            data = supabase.storage.from_("lectures").download(doc["storage_path"])
+            text = extract_text_from_file(data, doc["filename"])
+            if not text or len(text.strip()) < 50:
+                raise Exception("Extracted text was too short to analyse.")
+            supabase.table("documents").update({
+                "extracted_text": text,
+                "status": "detecting_topics",
+            }).eq("id", doc["id"]).execute()
+            print(f"[extract] {len(text)} chars")
+        except Exception as e:
+            supabase.table("documents").update({
+                "status": "failed", "error": str(e)[:300],
+            }).eq("id", doc["id"]).execute()
+            print(f"[extract] failed: {e}")
+
+    # Pass 2: detect topics for detecting_topics documents
+    detecting = (
         supabase.table("documents")
         .select("id, extracted_text")
         .eq("status", "detecting_topics")
@@ -154,35 +189,25 @@ def process_pending_documents() -> int:
         .execute()
     ).data
 
-    if not docs:
-        return 0
-
-    for doc in docs:
+    for doc in detecting:
         try:
-            print(f"[topics] document {doc['id']}")
+            print(f"[topics] {doc['id']}")
             topics = detect_topics(doc["extracted_text"] or "")
-
             supabase.table("topics").delete().eq("document_id", doc["id"]).execute()
             rows = [
-                {
-                    "document_id": doc["id"],
-                    "title": t["title"],
-                    "summary": t["summary"],
-                    "order": i + 1,
-                    "selected": True,
-                }
+                {"document_id": doc["id"], "title": t["title"], "summary": t["summary"], "order": i + 1, "selected": True}
                 for i, t in enumerate(topics)
             ]
             supabase.table("topics").insert(rows).execute()
             supabase.table("documents").update({"status": "topics_ready"}).eq("id", doc["id"]).execute()
-            print(f"[topics] {len(rows)} topics for {doc['id']}")
+            print(f"[topics] {len(rows)} topics")
         except Exception as e:
-            msg = str(e)[:300]
-            print(f"[topics] failed for {doc['id']}: {msg}")
-            supabase.table("documents").update({"status": "failed", "error": msg}).eq("id", doc["id"]).execute()
+            supabase.table("documents").update({
+                "status": "failed", "error": str(e)[:300],
+            }).eq("id", doc["id"]).execute()
+            print(f"[topics] failed: {e}")
 
-    return len(docs)
-
+    return len(processing) + len(detecting)
 
 def process_pending_lessons() -> int:
     lessons = (
