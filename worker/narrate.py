@@ -1,55 +1,55 @@
-import os
-import re
 import io
-import wave
+import json
 import numpy as np
-from kokoro_onnx import Kokoro
+import onnxruntime as ort
 import soundfile as sf
+from huggingface_hub import hf_hub_download
+from misaki import en
 
-VOICE = "af_heart"   # change to "am_michael" if you preferred the male voice
+VOICE = "af_msa"  # Required for the distilled model
 SPEED = 0.85
 SAMPLE_RATE = 24000
 
-_kokoro = None
+REPO = "oddadmix/Kokoro-7M-Distill-ONNX"
+_sess = None
+_vocab = None
+_voice = None
+_g2p = None
 
 
-def get_kokoro() -> Kokoro:
-    global _kokoro
-    if _kokoro is None:
-        _kokoro = Kokoro("kokoro-v1.0.onnx", "voices-v1.0.bin")
-    return _kokoro
-
-
-def split_into_chunks(text: str, max_chars: int = 600) -> list[str]:
-    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
-    chunks, current = [], ""
-    for s in sentences:
-        if len(current) + len(s) + 1 <= max_chars:
-            current = f"{current} {s}".strip()
-        else:
-            if current:
-                chunks.append(current)
-            current = s
-    if current:
-        chunks.append(current)
-    return chunks
-
-
-def synthesize(script: str) -> tuple[bytes, float]:
-    kokoro = get_kokoro()
-    chunks = split_into_chunks(script)
-    all_samples = []
-
-    for i, chunk in enumerate(chunks):
-        samples, sr = kokoro.create(
-            chunk, voice=VOICE, speed=SPEED, lang="en-us"
+def get_kokoro():
+    global _sess, _vocab, _voice, _g2p
+    if _sess is None:
+        opts = ort.SessionOptions()
+        opts.intra_op_num_threads = 2
+        _sess = ort.InferenceSession(
+            hf_hub_download(REPO, "onnx/model.onnx"),
+            opts,
+            providers=["CPUExecutionProvider"],
         )
-        all_samples.append(samples)
-        print(f"  chunk {i + 1}/{len(chunks)}: {len(samples) / sr:.1f}s")
+        _vocab = json.load(open(hf_hub_download(REPO, "config.json")))["vocab"]
+        _voice = np.fromfile(
+            hf_hub_download(REPO, f"voices/{VOICE}.bin"), dtype=np.float32
+        ).reshape(-1, 1, 256)
+        _g2p = en.G2P(trf=False, british=False, fallback=None, unk="")
+    return _sess, _vocab, _voice, _g2p
 
-    audio = np.concatenate(all_samples)
+
+def synthesize(text: str) -> tuple[bytes, float]:
+    sess, vocab, voice, g2p = get_kokoro()
+    phonemes = g2p(text)[0]
+    ids = [vocab[p] for p in phonemes if p in vocab][:510]
+
+    audio = sess.run(
+        None,
+        {
+            "input_ids": np.array([[0, *ids, 0]], dtype=np.int64),
+            "style": voice[len(ids) - 1],
+            "speed": np.array([SPEED], dtype=np.float32),
+        },
+    )[0]
+
     duration = len(audio) / SAMPLE_RATE
-
     buf = io.BytesIO()
     sf.write(buf, audio, SAMPLE_RATE, format="WAV", subtype="PCM_16")
     buf.seek(0)
