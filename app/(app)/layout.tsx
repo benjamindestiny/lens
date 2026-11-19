@@ -6,10 +6,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen">
       <header className="border-b border-border bg-surface">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-          <Link href="/dashboard" className="text-base font-semibold tracking-tight text-foreground">
+          <Link
+            href="/dashboard"
+            className="text-base font-semibold tracking-tight text-foreground"
+          >
             lens
           </Link>
           <div className="flex items-center gap-2">
+            <Link
+              href="/billing"
+              className="text-sm text-muted transition-colors hover:text-foreground"
+            >
+              Billing
+            </Link>
             <ThemeToggle />
             <span className="ml-2 h-4 w-px bg-border" />
             <span className="rounded-full bg-background px-3 py-1 text-xs font-medium text-muted">

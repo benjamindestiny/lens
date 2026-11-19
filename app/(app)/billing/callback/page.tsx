@@ -1,8 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function BillingCallback() {
+function BillingCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState("Verifying your payment…");
@@ -33,5 +33,19 @@ export default function BillingCallback() {
         <p className="mt-4 text-base text-muted">{status}</p>
       </div>
     </div>
+  );
+}
+
+export default function BillingCallback() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          Verifying your payment…
+        </div>
+      }
+    >
+      <BillingCallbackContent />
+    </Suspense>
   );
 }

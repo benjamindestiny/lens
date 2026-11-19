@@ -15,15 +15,15 @@ export async function middleware(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
+            request.cookies.set(name, value),
           );
           response = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
+            response.cookies.set(name, value, options),
           );
         },
       },
-    }
+    },
   );
 
   await supabase.auth.getUser();
@@ -32,10 +32,13 @@ export async function middleware(request: NextRequest) {
   const isProtected =
     path.startsWith("/dashboard") ||
     path.startsWith("/upload") ||
-    path.startsWith("/documents");
+    path.startsWith("/documents") ||
+    path.startsWith("/billing");
 
   if (isProtected) {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.redirect(new URL("/login", request.url));
     }
@@ -45,5 +48,10 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/upload/:path*", "/documents/:path*"],
+  matcher: [
+    "/dashboard/:path*",
+    "/upload/:path*",
+    "/documents/:path*",
+    "/billing/:path*",
+  ],
 };
