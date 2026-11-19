@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { extractTextFromFile } from "@/lib/extract-text";
 
 export async function GET() {
   const supabase = await createClient();
@@ -36,10 +35,5 @@ export async function POST(req: Request) {
     return Response.json({ error: { code: "DB_ERROR", message: error?.message ?? "Insert failed." } }, { status: 500 });
   }
 
-  const documentId = data.id as string;
-
-  return Response.json({ error: { code: "EXTRACTION_FAILED", message: msg } }, { status: 500 });
-  }
-
-  return Response.json({ document_id: documentId, status: "detecting_topics", filename }, { status: 201 });
+  return Response.json({ document_id: data.id, status: "processing", filename }, { status: 201 });
 }
