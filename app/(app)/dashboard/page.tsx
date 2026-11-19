@@ -44,9 +44,10 @@ export default async function DashboardPage() {
           </p>
         </div>
         <ButtonLink href="/upload">Upload lecture</ButtonLink>
+         <ButtonLink href="/billing" variant="secondary">Billing</ButtonLink>
       </div>
 
-      <ButtonLink href="/billing" variant="secondary">Billing</ButtonLink>
+     
 
       {!hasDocuments ? (
         <div className="mt-10">
