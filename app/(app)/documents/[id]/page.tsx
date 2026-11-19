@@ -7,6 +7,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge, statusTone } from "@/components/ui/badge";
 
+function stepLabel(status: string): string {
+  switch (status) {
+    case "queued": return "Waiting…";
+    case "scripted": return "Writing script…";
+    case "narrating": return "Recording narration…";
+    case "narrated": return "Rendering video…";
+    case "ready": return "Ready";
+    case "failed": return "Failed";
+    default: return "Generating…";
+  }
+}
+
 export default function DocumentPage({
   params,
 }: {
@@ -206,7 +218,7 @@ export default function DocumentPage({
                       <div className="min-w-0">
                         <p className="truncate text-base font-medium text-foreground">{l.title}</p>
                         <p className="text-sm text-muted">
-                          {l.duration_seconds ? `${Math.round(l.duration_seconds / 60)} min` : (l.status === "ready" ? "" : "Generating…")}
+                          {l.duration_seconds ? `${Math.round(l.duration_seconds / 60)} min` : stepLabel(l.status)}
                         </p>
                       </div>
                     </div>
